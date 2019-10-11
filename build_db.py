@@ -5,6 +5,7 @@
 
 import sqlite3
 import csv
+import uuid
 from datetime import datetime
 
 # Delcare sqlite3 connection , cursor and database name
@@ -14,20 +15,30 @@ c = conn.cursor()
 # was the only way I could get proper operation from the transaction
 # Possibly a better way?
 transaction = []
+rowid = 0
 
 
 # Create the "city_data" table in if not already present
 def create_table():
-    c.execute("CREATE TABLE IF NOT EXISTS city_data(Zipcode INT PRIMARY KEY, City TEXT, State TEXT, Abbr TEXT, County TEXT,Lattatude REAL, Longitude REAL)")
+    c.execute("CREATE TABLE IF NOT EXISTS city_data(Zipcode TEXT PRIMARY KEY, City TEXT, State TEXT, Abbr TEXT, County TEXT,Lattatude REAL, Longitude REAL)")
 
 # Cleaning up the data of the CSV to prevent errors when populating the DB
-def sanitize(data):
+def sanitizeStrings(data):
     data = data.replace("St.", "Saint").replace("Mt.", "Mount").replace("'s", "s").replace("'S", "s").replace("O'", "O-")
     return data
 
+def sanitizeZipCodeString(zipcode):
+    parsed = int(zipcode)
+    if parsed < 1000:
+        return f'00{zipcode}'
+    elif parsed < 10000:
+        return f'0{zipcode}'
+    return zipcode
+
 # Building the list item before passing to the appropriate transacation
-def build_transaction(code, city, state, abbr, county, lat, lonng, row):
-    sql = "INSERT INTO city_data(Zipcode, City, State, Abbr, County, Lattatude, Longitude) VALUES ('{}', '{}', '{}', '{}', '{}', '{}', '{}');".format(code, city, state, abbr, county, lat, lonng)
+def build_transaction(code: str, city: str, state: str, abbr: str, county: str, lat: float, lonng: float, row: int):
+    sql = f"INSERT INTO city_data(Zipcode, City, State, Abbr, County, Lattatude, Longitude)\
+           VALUES ('{code}', '{city}', '{state}', '{abbr}', '{county}', '{lat}', '{lonng}');"
     # To optimize INSERTS, performed multiple types of transactions
     # CSV contains 40933 rows so multiple transactions were needed
     if row <= 40000:
@@ -87,14 +98,14 @@ if __name__ == '__main__':
         csv_reader = csv.reader(file)
         for row in csv_reader:
             row_counter += 1
-            code = row[0]
+            code = sanitizeZipCodeString(row[0])
             # Cleaning up items to prevent errors
-            city = sanitize(row[1])
+            city = sanitizeStrings(row[1])
             state = row[2]
             # State abreviation
             abbr = row[3]
             # Cleaning up rows to prevent errors
-            county = sanitize(row[4])
+            county = sanitizeStrings(row[4])
             lat = row[5]
             lonng = row[6]
             build_transaction(code, city, state, abbr, county, lat, lonng, row_counter)
